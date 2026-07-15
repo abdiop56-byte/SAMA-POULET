@@ -496,6 +496,7 @@ function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
 
   if (!PERMS[userInfo?.role]?.suivi) return <AccessDenied />;
   const canWrite = WRITE_PERMS[userInfo?.role]?.suivi;
+  const bandeCloturee = bandeCfg?.statut === "archivee";
 
   const openNew = () => { setEditId(null); setF({ date: new Date().toISOString().split("T")[0], morts: "", alimentKg: "", poidsMoyen: "", temperature: "", observations: "" }); setShow(true); };
   const openEdit = (j) => { setF({ date: j.date, morts: j.morts, alimentKg: j.alimentKg || "", poidsMoyen: j.poidsMoyen || "", temperature: j.temperature || "", observations: j.observations || "" }); setEditId(j.id); setShow(true); };
@@ -517,9 +518,14 @@ function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
     <div style={S.section}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <p style={S.sectionTitle}>🐔 Suivi Quotidien</p>
-        {canWrite && <button onClick={openNew} style={S.btnSm("#1E8449")}>+ Saisir</button>}
+        {canWrite && !bandeCloturee && <button onClick={openNew} style={S.btnSm("#1E8449")}>+ Saisir</button>}
         {!canWrite && <span style={S.tag("#AAB7B8")}>👁️ Lecture seule</span>}
       </div>
+      {bandeCloturee && (
+        <div style={{ ...S.alert("#6C3483"), background: "#F3E5F5", border: "1.5px solid #6C3483" }}>
+          <span style={{ fontWeight: 700, color: "#6C3483" }}>🔒 Bande clôturée</span> — consultation uniquement
+        </div>
+      )}
       <div style={S.kpiRow}>
         <div style={S.kpi("#1A5276")}><div style={S.kpiVal}>{fmtN(effectif)}</div><div style={S.kpiLbl}>Effectif actuel</div></div>
         <div style={S.kpi("#C0392B")}><div style={S.kpiVal}>{fmtN(totalMorts)}</div><div style={S.kpiLbl}>Total morts</div></div>
@@ -532,8 +538,8 @@ function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
               <span style={{ fontWeight: 700, color: "#0F2940" }}>📅 {j.date}</span>
               <div style={{ display: "flex", gap: 5 }}>
                 <span style={S.tag(j.morts > 5 ? "#C0392B" : "#1E8449")}>{j.morts} mort(s)</span>
-                {canWrite && <button onClick={() => openEdit(j)} style={S.btnIcon()}>✏️</button>}
-                {canWrite && <button onClick={() => del(j.id)} style={S.btnIcon("#FFF0F0")}>🗑️</button>}
+                {canWrite && !bandeCloturee && <button onClick={() => openEdit(j)} style={S.btnIcon()}>✏️</button>}
+                {canWrite && !bandeCloturee && <button onClick={() => del(j.id)} style={S.btnIcon("#FFF0F0")}>🗑️</button>}
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
@@ -564,8 +570,9 @@ function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
 }
 
 // ── CARTE VENTE ───────────────────────────────────────────────────
-function VenteCard({ v, canWrite, delVente, onEdit }) {
+function VenteCard({ v, canWrite, delVente, onEdit, bandeCloturee }) {
   const [confirmDel, setConfirmDel] = useState(false);
+  const [confirmEdit, setConfirmEdit] = useState(false);
   return (
     <div style={S.card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -578,10 +585,16 @@ function VenteCard({ v, canWrite, delVente, onEdit }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontWeight: 800, color: "#1E8449", fontSize: 13 }}>{fmt(v.total)}</span>
-          {canWrite && <button onClick={onEdit} style={S.btnIcon()}>✏️</button>}
-          {canWrite && !confirmDel && <button onClick={() => setConfirmDel(true)} style={S.btnIcon("#FFF0F0")}>🗑️</button>}
+          {canWrite && !bandeCloturee && !confirmEdit && !confirmDel && <button onClick={() => setConfirmEdit(true)} style={S.btnIcon()}>✏️</button>}
+          {canWrite && !bandeCloturee && !confirmDel && !confirmEdit && <button onClick={() => setConfirmDel(true)} style={S.btnIcon("#FFF0F0")}>🗑️</button>}
         </div>
       </div>
+      {canWrite && confirmEdit && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <button onClick={() => { onEdit(); setConfirmEdit(false); }} style={{ ...S.btnSm("#1A5276"), flex: 1 }}>✏️ Confirmer modification</button>
+          <button onClick={() => setConfirmEdit(false)} style={{ ...S.btnSm("#888"), flex: 1 }}>✕ Annuler</button>
+        </div>
+      )}
       {canWrite && confirmDel && (
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
           <button onClick={() => delVente(v.id)} style={{ ...S.btnSm("#C0392B"), flex: 1 }}>✅ Confirmer suppression</button>
@@ -617,6 +630,40 @@ function SortieCard({ x, canWrite, delSortie, onEdit }) {
       {canWrite && confirmDel && (
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
           <button onClick={() => delSortie(x.id)} style={{ ...S.btnSm("#C0392B"), flex: 1 }}>✅ Confirmer suppression</button>
+          <button onClick={() => setConfirmDel(false)} style={{ ...S.btnSm("#888"), flex: 1 }}>✕ Annuler</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CARTE DÉPENSE ────────────────────────────────────────────────
+function DepenseCard({ d, canWrite, delDep, onEdit, bandeCloturee }) {
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [confirmEdit, setConfirmEdit] = useState(false);
+  return (
+    <div style={S.card}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>{d.description || d.categorie}</div>
+          <div style={{ fontSize: 11, color: "#888" }}>{d.categorie} • {d.date}</div>
+          <SigLine auteur={d.auteur} heureAction={d.heureAction} modifiePar={d.modifiePar} heureModif={d.heureModif} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ fontWeight: 800, color: "#C0392B", fontSize: 13 }}>{fmt(d.montant)}</span>
+          {canWrite && !bandeCloturee && !confirmEdit && !confirmDel && <button onClick={() => setConfirmEdit(true)} style={S.btnIcon()}>✏️</button>}
+          {canWrite && !bandeCloturee && !confirmDel && !confirmEdit && <button onClick={() => setConfirmDel(true)} style={S.btnIcon("#FFF0F0")}>🗑️</button>}
+        </div>
+      </div>
+      {canWrite && confirmEdit && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <button onClick={() => { onEdit(); setConfirmEdit(false); }} style={{ ...S.btnSm("#1A5276"), flex: 1 }}>✏️ Confirmer modification</button>
+          <button onClick={() => setConfirmEdit(false)} style={{ ...S.btnSm("#888"), flex: 1 }}>✕ Annuler</button>
+        </div>
+      )}
+      {canWrite && confirmDel && (
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <button onClick={() => delDep(d.id)} style={{ ...S.btnSm("#C0392B"), flex: 1 }}>✅ Confirmer suppression</button>
           <button onClick={() => setConfirmDel(false)} style={{ ...S.btnSm("#888"), flex: 1 }}>✕ Annuler</button>
         </div>
       )}
@@ -807,6 +854,7 @@ function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeC
 
   if (!PERMS[userInfo?.role]?.finances) return <AccessDenied />;
   const canWrite = WRITE_PERMS[userInfo?.role]?.finances;
+  const bandeCloturee = bandeCfg?.statut === "archivee";
 
   // Charger données bande 1 et crédits
   useEffect(() => {
@@ -965,6 +1013,11 @@ function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeC
   return (
     <div style={S.section}>
       <p style={S.sectionTitle}>💰 Finances</p>
+      {bandeCloturee && (
+        <div style={{ ...S.alert("#6C3483"), background: "#F3E5F5", border: "1.5px solid #6C3483" }}>
+          <span style={{ fontWeight: 700, color: "#6C3483" }}>🔒 Bande clôturée</span> — consultation uniquement, aucune modification possible
+        </div>
+      )}
 
       {/* Résumé financier global */}
       <div style={{ ...S.card, background: "linear-gradient(135deg, #0F2940, #1A4A7A)", color: "#fff" }}>
@@ -1083,31 +1136,20 @@ function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeC
       </div>
 
       {tab === "depenses" && <>
-        {canWrite && <button onClick={() => { setEditDepId(null); setDep({ date: "", categorie: "", description: "", montant: "" }); setShowDep(true); }} style={S.btn("#C0392B")}>+ Ajouter une dépense</button>}
+        {canWrite && !bandeCloturee && <button onClick={() => { setEditDepId(null); setDep({ date: "", categorie: "", description: "", montant: "" }); setShowDep(true); }} style={S.btn("#C0392B")}>+ Ajouter une dépense</button>}
         {!canWrite && <div style={S.alert("#AAB7B8")}><span style={{ color: "#888" }}>👁️ Lecture seule</span></div>}
         {depenses.length === 0
           ? <div style={{ ...S.card, textAlign: "center", padding: 24, color: "#AAB7B8" }}><div style={{ fontSize: 36 }}>💸</div><p>Aucune dépense</p></div>
           : depenses.map(d => (
-            <div key={d.id} style={S.card}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{d.description || d.categorie}</div>
-                  <div style={{ fontSize: 11, color: "#888" }}>{d.categorie} • {d.date}</div>
-                  <SigLine auteur={d.auteur} heureAction={d.heureAction} modifiePar={d.modifiePar} heureModif={d.heureModif} />
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ fontWeight: 800, color: "#C0392B", fontSize: 13 }}>{fmt(d.montant)}</span>
-                  {canWrite && <button onClick={() => { setDep({ date: d.date, categorie: d.categorie, description: d.description, montant: d.montant }); setEditDepId(d.id); setShowDep(true); }} style={S.btnIcon()}>✏️</button>}
-                  {canWrite && <button onClick={() => delDep(d.id)} style={S.btnIcon("#FFF0F0")}>🗑️</button>}
-                </div>
-              </div>
-            </div>
+            <DepenseCard key={d.id} d={d} canWrite={canWrite} bandeCloturee={bandeCloturee}
+              delDep={delDep}
+              onEdit={() => { setDep({ date: d.date, categorie: d.categorie, description: d.description, montant: d.montant }); setEditDepId(d.id); setShowDep(true); }} />
           ))
         }
       </>}
 
       {tab === "ventes" && <>
-        {canWrite && <button onClick={() => { setEditVenteId(null); setVente({ date: "", client: "", canal: "", nbPoulets: "", prixUnit: "", typeVente: "comptant", acompte: "", dateEcheance: "" }); setShowVente(true); }} style={S.btn("#1E8449")}>+ Enregistrer une vente</button>}
+        {canWrite && !bandeCloturee && <button onClick={() => { setEditVenteId(null); setVente({ date: "", client: "", canal: "", nbPoulets: "", prixUnit: "", typeVente: "comptant", acompte: "", dateEcheance: "" }); setShowVente(true); }} style={S.btn("#1E8449")}>+ Enregistrer une vente</button>}
         {!canWrite && <div style={S.alert("#AAB7B8")}><span style={{ color: "#888" }}>👁️ Lecture seule</span></div>}
 
         {/* Bouton vider toutes les ventes — admin seulement */}
@@ -1123,14 +1165,14 @@ function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeC
         {ventes.length === 0
           ? <div style={{ ...S.card, textAlign: "center", padding: 24, color: "#AAB7B8" }}><div style={{ fontSize: 36 }}>🛒</div><p>Aucune vente</p></div>
           : ventes.map(v => (
-            <VenteCard key={v.id} v={v} canWrite={canWrite} delVente={delVente}
+            <VenteCard key={v.id} v={v} canWrite={canWrite} delVente={delVente} bandeCloturee={bandeCloturee}
               onEdit={() => { setVente({ date: v.date, client: v.client, canal: v.canal, nbPoulets: v.nbPoulets, prixUnit: v.prixUnit, typeVente: "comptant", acompte: "", dateEcheance: "" }); setEditVenteId(v.id); setShowVente(true); }} />
           ))
         }
       </>}
 
       {tab === "credits" && <>
-        {canWrite && <button onClick={() => { setEditVenteId(null); setVente({ date: "", client: "", canal: "", nbPoulets: "", prixUnit: "", typeVente: "credit", acompte: "", dateEcheance: "" }); setShowVente(true); }} style={S.btn("#E67E22")}>+ Vente à crédit</button>}
+        {canWrite && !bandeCloturee && <button onClick={() => { setEditVenteId(null); setVente({ date: "", client: "", canal: "", nbPoulets: "", prixUnit: "", typeVente: "credit", acompte: "", dateEcheance: "" }); setShowVente(true); }} style={S.btn("#E67E22")}>+ Vente à crédit</button>}
 
         {/* Bouton vider tous les crédits — admin seulement */}
         {userInfo?.role === "admin" && credits.length > 0 && (
