@@ -249,27 +249,23 @@ function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInf
   const joursEcoules = Math.max(Math.floor((new Date() - new Date(dateDebut)) / 86400000) + 1, 1);
   const semaine = Math.min(Math.ceil(joursEcoules / 7), 8);
   const tauxMort = ((totalMorts / poussins) * 100).toFixed(1);
-  const progPct = Math.min((joursEcoules / 42) * 100, 100).toFixed(0);
   const vaccsRestants = vaccins.filter(v => !v.fait).length;
   const stock = bandeCfg?.stockAliments || 0;
+  const creditsEchus = (credits || []).filter(c => c.statut !== "payé" && c.dateEcheance && new Date(c.dateEcheance) < new Date()).length;
+  const numeroB = bandeCfg?.numero || (bandeActive === "bande2" ? 2 : 1);
 
   return (
     <div>
+      {/* ── En-tête simple ─────────────────────────────────────── */}
       <div style={S.header}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <p style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>🐓 Sama Poulet v2.0</p>
-            <p style={{ fontSize: 12, opacity: 0.7, margin: "4px 0 0" }}>Bonjour {userInfo?.nom} • {bandeCfg?.objectif || "Bande active"}</p>
+            <p style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>🐓 Sama Poulet</p>
+            <p style={{ fontSize: 12, opacity: 0.7, margin: "4px 0 0" }}>Bonjour {userInfo?.nom}</p>
           </div>
-          <span style={{ background: "#C9A84C", color: "#fff", borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 700 }}>Sem. {semaine}/6</span>
-        </div>
-        <div style={{ marginTop: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-            <span style={{ fontSize: 12, opacity: 0.8 }}>Progression bande</span>
-            <span style={{ fontSize: 12, fontWeight: 700 }}>{progPct}%</span>
-          </div>
-          <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.2)" }}>
-            <div style={S.bar(progPct, "#C9A84C")} />
+          <div style={{ textAlign: "right" }}>
+            <span style={{ background: "#C9A84C", color: "#fff", borderRadius: 20, padding: "4px 14px", fontSize: 12, fontWeight: 700 }}>Bande {numeroB}</span>
+            <p style={{ fontSize: 11, opacity: 0.6, margin: "6px 0 0" }}>Semaine {semaine}</p>
           </div>
         </div>
       </div>
@@ -279,7 +275,7 @@ function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInf
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
           {[
             { icon: "⚡", label: "Vente", action: () => setShowVenteRapide && setShowVenteRapide(true), color: "#1E8449", show: WRITE_PERMS[userInfo?.role]?.finances },
-            { icon: "🐔", label: "Suivi", action: () => setTab && setTab("suivi"), color: "#1A5276", show: WRITE_PERMS[userInfo?.role]?.suivi || PERMS[userInfo?.role]?.suivi },
+            { icon: "🐔", label: "Suivi", action: () => setTab && setTab("suivi"), color: "#1A5276", show: PERMS[userInfo?.role]?.suivi },
             { icon: "💸", label: "Dépense", action: () => setTab && setTab("finances"), color: "#C0392B", show: WRITE_PERMS[userInfo?.role]?.finances },
             { icon: "📦", label: "Stock", action: () => setTab && setTab("finances"), color: "#E67E22", show: true },
             { icon: "💉", label: "Santé", action: () => setTab && setTab("sante"), color: "#6C3483", show: PERMS[userInfo?.role]?.sante },
@@ -297,18 +293,40 @@ function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInf
         </div>
       </div>
 
-      {/* ── Historique unifié — bande active ───────────────────── */}
+      {/* ── 4 chiffres clés ─────────────────────────────────────── */}
+      <div style={{ padding: "18px 16px 0" }}>
+        <div style={S.kpiRow}>
+          <div style={S.kpi("#1A5276")}><div style={S.kpiVal}>{fmtN(Math.max(effectif - nbVendus, 0))}</div><div style={S.kpiLbl}>🐔 Poulets restants</div></div>
+          <div style={S.kpi("#784212")}><div style={S.kpiVal}>{fmtN(nbVendus)}</div><div style={S.kpiLbl}>Vendus / sortis</div></div>
+        </div>
+        <div style={S.kpiRow}>
+          <div style={S.kpi("#1E8449")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(totalV + totalCreditRecu)}</div><div style={S.kpiLbl}>💵 Argent encaissé</div></div>
+          <div style={S.kpi(resultat >= 0 ? "#0F2940" : "#8B1A1A")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(Math.abs(resultat))}</div><div style={S.kpiLbl}>{resultat >= 0 ? "✅ Bénéfice" : "❌ Perte"}</div></div>
+        </div>
+      </div>
+
+      {/* ── Alertes (seulement si nécessaire) ───────────────────── */}
+      {(Number(tauxMort) > 5 || (stock > 0 && stock < 50) || vaccsRestants > 0 || creditsEchus > 0) && (
+        <div style={{ padding: "14px 16px 0" }}>
+          {Number(tauxMort) > 5 && <div style={S.alert("#C0392B")}><span style={{ fontWeight: 700, color: "#C0392B" }}>🚨 Mortalité {tauxMort}%</span> — seuil critique dépassé !</div>}
+          {stock > 0 && stock < 50 && <div style={S.alert("#C0392B")}><span style={{ fontWeight: 700, color: "#C0392B" }}>⚠️ Stock aliments bas :</span> {fmtN(stock)} kg — approvisionner</div>}
+          {vaccsRestants > 0 && <div style={S.alert("#E67E22")}><span style={{ fontWeight: 700, color: "#E67E22" }}>💉 {vaccsRestants} vaccination(s)</span> à faire — voir Santé</div>}
+          {creditsEchus > 0 && <div style={S.alert("#E67E22")}><span style={{ fontWeight: 700, color: "#E67E22" }}>💳 {creditsEchus} crédit(s) échu(s)</span> — relancer les clients</div>}
+        </div>
+      )}
+
+      {/* ── Dernières activités — bande active ──────────────────── */}
       {(() => {
         const histo = [
-          ...ventes.map(v => ({ ...v, _type: "vente", _label: v.client, _montant: Number(v.total || 0), _sens: "+" })),
-          ...(credits || []).map(c => ({ ...c, _type: "credit", _label: c.client + (c.statut !== "payé" ? ` (${c.statut})` : ""), _montant: Number(c.montantRecu || 0), _sens: c.montantRecu > 0 ? "+" : "·" })),
-          ...depenses.map(d => ({ ...d, _type: "depense", _label: d.description || d.categorie, _montant: Number(d.montant || 0), _sens: "-" })),
-          ...(sorties || []).map(x => ({ ...x, _type: "sortie", _label: `${x.beneficiaire || x.categorie} (sortie)`, _montant: 0, _sens: "·" })),
+          ...ventes.map(v => ({ ...v, _label: v.client, _montant: Number(v.total || 0), _sens: "+" })),
+          ...(credits || []).map(c => ({ ...c, _label: c.client + (c.statut !== "payé" ? " (crédit)" : ""), _montant: Number(c.montantRecu || 0), _sens: c.montantRecu > 0 ? "+" : "·" })),
+          ...depenses.map(d => ({ ...d, _label: d.description || d.categorie, _montant: Number(d.montant || 0), _sens: "-" })),
+          ...(sorties || []).map(x => ({ ...x, _label: `${x.beneficiaire || x.categorie} (sans paiement)`, _montant: 0, _sens: "·" })),
         ].filter(h => h.createdAt).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 8);
 
         return (
           <div style={{ padding: "20px 16px 0" }}>
-            <p style={{ fontSize: 13, fontWeight: 800, color: "#0F2940", margin: "0 0 10px" }}>🐔 Activité — {bandeActive === "bande2" ? "Bande 2" : bandeActive === "bande1" ? "Bande 1" : bandeActive}</p>
+            <p style={{ fontSize: 13, fontWeight: 800, color: "#0F2940", margin: "0 0 10px" }}>📋 Dernières activités — Bande {numeroB}</p>
             {histo.length === 0
               ? <p style={{ fontSize: 12, color: "#AAB7B8", textAlign: "center", padding: "20px 0" }}>Aucune activité encore</p>
               : histo.map((h, i) => (
@@ -327,157 +345,28 @@ function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInf
         );
       })()}
 
-      <div style={S.section}>
-        {userInfo?.role === "admin" && (
-          <div style={{ ...S.card, background: "#FFF0F0", border: "1.5px solid #C0392B" }}>
-            <p style={{ fontWeight: 700, color: "#C0392B", fontSize: 13, marginBottom: 8 }}>🛠️ Outil admin — Vider bande 2</p>
-            <button onClick={async () => {
-              try {
-                const { getDocs, collection: col, deleteDoc: del, doc: d } = await import("firebase/firestore");
-                const snap = await getDocs(col(db, "samapoulet", "bande2", "ventes"));
-                for (const dc of snap.docs) await del(d(db, "samapoulet", "bande2", "ventes", dc.id));
-                alert(`✅ ${snap.docs.length} vente(s) supprimée(s) !`);
-              } catch(e) { alert("Erreur : " + e.message); }
-            }} style={S.btn("#C0392B")}>🗑️ Supprimer toutes les ventes bande 2</button>
-
-            <div style={{ height: 10 }} />
-            <p style={{ fontWeight: 700, color: "#6C3483", fontSize: 13, marginBottom: 8 }}>🔄 Migrer les crédits payés oubliés</p>
-            <button onClick={async () => {
-              try {
-                const { getDocs, collection: col, deleteDoc: del, doc: d, addDoc: add } = await import("firebase/firestore");
-                const cible = bandeActive || "bande2";
-                const snap = await getDocs(col(db, "samapoulet", cible, "credits"));
-                let migres = [];
-                for (const dc of snap.docs) {
-                  const data = dc.data();
-                  if (data.statut === "payé") {
-                    const { montantRecu, resteDu, statut, createdAt, ...rest } = data;
-                    await add(col(db, "samapoulet", cible, "ventes"), {
-                      ...rest, total: data.total, notes: "Crédit soldé (migré)",
-                      createdAt: createdAt || new Date().toISOString()
-                    });
-                    await del(d(db, "samapoulet", cible, "credits", dc.id));
-                    migres.push(data.client);
-                  }
-                }
-                alert(migres.length > 0 ? `✅ ${migres.length} crédit(s) migré(s) vers Ventes :\n${migres.join(", ")}` : "Aucun crédit payé trouvé à migrer.");
-              } catch(e) { alert("Erreur : " + e.message); }
-            }} style={S.btn("#6C3483")}>🔄 Migrer les crédits "payé" vers Ventes</button>
-          </div>
-        )}
-        {Number(tauxMort) > 5 && <div style={S.alert("#C0392B")}><span style={{ fontWeight: 700, color: "#C0392B" }}>🚨 Mortalité {tauxMort}%</span> — seuil critique dépassé !</div>}
-        {stock > 0 && stock < 50 && <div style={S.alert("#C0392B")}><span style={{ fontWeight: 700, color: "#C0392B" }}>⚠️ Stock aliments critique :</span> {fmtN(stock)} kg restants — approvisionner urgent !</div>}
-
-        <div style={S.kpiRow}>
-          <div style={S.kpi("#1A5276")}><div style={S.kpiVal}>{fmtN(effectif)}</div><div style={S.kpiLbl}>Effectif actuel</div></div>
-          <div style={S.kpi("#C0392B")}><div style={S.kpiVal}>{fmtN(totalMorts)}</div><div style={S.kpiLbl}>Morts ({tauxMort}%)</div></div>
-        </div>
-        <div style={S.kpiRow}>
-          <div style={S.kpi("#1E8449")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(totalV)}</div><div style={S.kpiLbl}>Total ventes</div></div>
-          <div style={S.kpi(resultat >= 0 ? "#0F2940" : "#8B1A1A")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(Math.abs(resultat))}</div><div style={S.kpiLbl}>{resultat >= 0 ? "✅ Bénéfice" : "❌ Perte"}</div></div>
-        </div>
-
-        {stock > 0 && (
-          <div style={S.card}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <p style={{ fontSize: 12, color: "#888", margin: "0 0 2px" }}>📦 Stock Aliments</p>
-                <p style={{ fontSize: 22, fontWeight: 800, color: stock < 50 ? "#C0392B" : "#1E8449", margin: 0 }}>{fmtN(stock)} kg</p>
-              </div>
-              <span style={S.tag(stock < 50 ? "#C0392B" : stock < 100 ? "#E67E22" : "#1E8449")}>
-                {stock < 50 ? "🚨 Critique" : stock < 100 ? "⚠️ Bas" : "✅ OK"}
-              </span>
-            </div>
-          </div>
-        )}
-
-        <div style={{ ...S.card, background: "linear-gradient(135deg, #0F2940, #1A4A7A)", color: "#fff" }}>
-          <p style={{ fontSize: 11, opacity: 0.7, margin: "0 0 8px" }}>🎯 {bandeCfg?.objectif}</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", textAlign: "center", gap: 8 }}>
-            {[["Sortis", nbVendus], ["Restants", Math.max(effectif - nbVendus, 0)], ["Départ", poussins]].map(([l, v]) => (
-              <div key={l}><div style={{ fontSize: 20, fontWeight: 800 }}>{fmtN(v)}</div><div style={{ fontSize: 10, opacity: 0.65 }}>{l}</div></div>
-            ))}
-          </div>
-        </div>
-
-        <div style={S.card}>
-          <p style={S.cardTitle}>📅 Calendrier Bande</p>
-          {[
-            ["S1 — 15-21 Mai", "Démarrage, eau sucrée, Newcastle"],
-            ["S2 — 22-28 Mai", "Aliment démarrage, Gumboro"],
-            ["S3 — 29 Mai-4 Juin", "Passage aliment croissance"],
-            ["S4 — 5-11 Juin", "Peser les poulets, surveiller"],
-            ["S5 — 12-18 Juin", "Aliment finition, contacter acheteurs"],
-            ["S6 — 19-26 Juin", "🐔 VENTE — Tamkharite !"],
-          ].map(([sem, action], i) => (
-            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8 }}>
-              <span style={{ fontSize: 16 }}>{i + 1 < semaine ? "✅" : i + 1 === semaine ? "▶️" : "⏳"}</span>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: i + 1 === semaine ? "#1A5276" : "#666" }}>{sem}</div>
-                <div style={{ fontSize: 11, color: "#888" }}>{action}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── VUE GÉNÉRALE — toutes bandes confondues ─────────────── */}
+      {/* ── Vue générale — 1 carte compacte ─────────────────────── */}
       {(() => {
         if (!donneesGlobales || donneesGlobales.loading) return null;
         const gVentes = donneesGlobales.ventes || [];
         const gDepenses = donneesGlobales.depenses || [];
         const gCredits = donneesGlobales.credits || [];
-        const gSorties = donneesGlobales.sorties || [];
-
         const gTotalV = gVentes.reduce((s, v) => s + Number(v.total || 0), 0);
         const gTotalCreditRecu = gCredits.reduce((s, c) => s + Number(c.montantRecu || 0), 0);
         const gTotalDep = gDepenses.reduce((s, d) => s + Number(d.montant || 0), 0);
         const gResultat = (gTotalV + gTotalCreditRecu) - gTotalDep;
-        const gNbSortis = calcNbSortis(gVentes, gCredits, gSorties);
         const gCreditDu = gCredits.filter(c => c.statut !== "payé").reduce((s, c) => s + (Number(c.total || 0) - Number(c.montantRecu || 0)), 0);
 
-        const histoGlobal = [
-          ...gVentes.map(v => ({ ...v, _label: v.client, _montant: Number(v.total || 0), _sens: "+" })),
-          ...gDepenses.map(d => ({ ...d, _label: d.description || d.categorie, _montant: Number(d.montant || 0), _sens: "-" })),
-        ].filter(h => h.createdAt).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 6);
-
         return (
-          <div style={{ ...S.section, marginTop: 8 }}>
-            <p style={{ fontSize: 15, fontWeight: 800, color: "#0F2940", margin: "0 0 12px" }}>🌍 Vue générale — Toutes les bandes ({bandes?.length || 0})</p>
-
-            <div style={{ ...S.card, background: "linear-gradient(135deg, #2C3E50, #4A6378)", color: "#fff" }}>
+          <div style={{ padding: "20px 16px 16px" }}>
+            <p style={{ fontSize: 13, fontWeight: 800, color: "#0F2940", margin: "0 0 10px" }}>🌍 Vue générale — toutes les bandes ({bandes?.length || 0})</p>
+            <div style={{ ...S.card, background: "linear-gradient(135deg, #2C3E50, #4A6378)", color: "#fff", marginBottom: 0 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", textAlign: "center", gap: 8 }}>
-                {[["Dépenses", fmt(gTotalDep), "#FF6B6B"], ["Recettes", fmt(gTotalV + gTotalCreditRecu), "#51CF66"], ["Résultat", fmt(Math.abs(gResultat)), gResultat >= 0 ? "#51CF66" : "#FF6B6B"]].map(([l, v, c]) => (
+                {[["Dépenses", fmt(gTotalDep), "#FF6B6B"], ["Recettes", fmt(gTotalV + gTotalCreditRecu), "#51CF66"], [gResultat >= 0 ? "Bénéfice" : "Perte", fmt(Math.abs(gResultat)), gResultat >= 0 ? "#51CF66" : "#FF6B6B"]].map(([l, v, c]) => (
                   <div key={l}><div style={{ fontSize: 13, fontWeight: 800, color: c }}>{v}</div><div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>{l}</div></div>
                 ))}
               </div>
-              <div style={{ textAlign: "center", marginTop: 10, fontSize: 13, fontWeight: 700, color: gResultat >= 0 ? "#51CF66" : "#FF6B6B" }}>
-                {gResultat >= 0 ? "✅ Bénéfice global" : "❌ Perte globale"} : {fmt(Math.abs(gResultat))}
-              </div>
-              {gCreditDu > 0 && <div style={{ textAlign: "center", marginTop: 6, fontSize: 11, color: "#FCC419" }}>⚠️ Créances en attente : {fmt(gCreditDu)}</div>}
-            </div>
-
-            <div style={S.kpiRow}>
-              <div style={S.kpi("#1A5276")}><div style={S.kpiVal}>{fmtN(gNbSortis)}</div><div style={S.kpiLbl}>Poulets sortis (toutes bandes)</div></div>
-              <div style={S.kpi("#784212")}><div style={S.kpiVal}>{bandes?.length || 0}</div><div style={S.kpiLbl}>Bandes au total</div></div>
-            </div>
-
-            <div style={S.card}>
-              <p style={S.cardTitle}>📋 Dernières activités (toutes bandes)</p>
-              {histoGlobal.length === 0
-                ? <p style={{ fontSize: 12, color: "#AAB7B8", textAlign: "center", padding: "10px 0" }}>Aucune activité</p>
-                : histoGlobal.map((h, i) => (
-                  <div key={(h.id || i) + "_g"} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F0F4F8" }}>
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "#0F2940" }}>{h._label}</div>
-                      <div style={{ fontSize: 10, color: "#AAB7B8" }}>{h.date} • {h._bandeNumero ? `Bande ${h._bandeNumero}` : h._bande}</div>
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: h._sens === "+" ? "#1E8449" : "#C0392B" }}>
-                      {h._sens}{fmt(h._montant)}
-                    </span>
-                  </div>
-                ))
-              }
+              {gCreditDu > 0 && <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#FCC419" }}>💳 Argent à récupérer : {fmt(gCreditDu)}</div>}
             </div>
           </div>
         );
@@ -514,11 +403,14 @@ function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
 
   const del = async (id) => { if (window.confirm("Supprimer cette saisie ?")) await deleteDoc(doc(db, "samapoulet", bandeActive, "suiviQuotidien", id)); };
 
+  const dateDebut = bandeCfg?.dateDebut || "2026-05-15";
+  const joursEcoules = Math.max(Math.floor((new Date() - new Date(dateDebut)) / 86400000) + 1, 1);
+  const semaine = Math.min(Math.ceil(joursEcoules / 7), 8);
+
   return (
     <div style={S.section}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <p style={S.sectionTitle}>🐔 Suivi Quotidien</p>
-        {canWrite && !bandeCloturee && <button onClick={openNew} style={S.btnSm("#1E8449")}>+ Saisir</button>}
         {!canWrite && <span style={S.tag("#AAB7B8")}>👁️ Lecture seule</span>}
       </div>
       {bandeCloturee && (
@@ -526,10 +418,36 @@ function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
           <span style={{ fontWeight: 700, color: "#6C3483" }}>🔒 Bande clôturée</span> — consultation uniquement
         </div>
       )}
+      {canWrite && !bandeCloturee && (
+        <button onClick={openNew} style={{ ...S.btn("#1E8449"), fontSize: 16, padding: "16px" }}>➕ Saisir aujourd'hui (morts, aliment...)</button>
+      )}
       <div style={S.kpiRow}>
         <div style={S.kpi("#1A5276")}><div style={S.kpiVal}>{fmtN(effectif)}</div><div style={S.kpiLbl}>Effectif actuel</div></div>
         <div style={S.kpi("#C0392B")}><div style={S.kpiVal}>{fmtN(totalMorts)}</div><div style={S.kpiLbl}>Total morts</div></div>
       </div>
+
+      {/* Calendrier de la bande */}
+      <div style={S.card}>
+        <p style={S.cardTitle}>📅 Calendrier de la bande</p>
+        {[
+          ["S1 — 15-21 Mai", "Démarrage, eau sucrée, Newcastle"],
+          ["S2 — 22-28 Mai", "Aliment démarrage, Gumboro"],
+          ["S3 — 29 Mai-4 Juin", "Passage aliment croissance"],
+          ["S4 — 5-11 Juin", "Peser les poulets, surveiller"],
+          ["S5 — 12-18 Juin", "Aliment finition, contacter acheteurs"],
+          ["S6 — 19-26 Juin", "🐔 VENTE — Tamkharite !"],
+        ].map(([sem, action], i) => (
+          <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 16 }}>{i + 1 < semaine ? "✅" : i + 1 === semaine ? "▶️" : "⏳"}</span>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: i + 1 === semaine ? "#1A5276" : "#666" }}>{sem}</div>
+              <div style={{ fontSize: 11, color: "#888" }}>{action}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p style={{ fontSize: 12, fontWeight: 700, color: "#888", margin: "16px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>📋 Historique des saisies</p>
       {suivi.length === 0
         ? <div style={{ ...S.card, textAlign: "center", padding: 32, color: "#AAB7B8" }}><div style={{ fontSize: 40 }}>📋</div><p>Aucune saisie</p></div>
         : suivi.slice(0, 15).map(j => (
@@ -829,8 +747,8 @@ function VenteRapide({ userInfo, bandeActive, onClose }) {
 }
 
 // ── FINANCES ──────────────────────────────────────────────────────
-function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeCfg }) {
-  const [tab, setTab] = useState("depenses");
+function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeCfg, bandes = [] }) {
+  const [tab, setTab] = useState("entrees");
   const [showDep, setShowDep] = useState(false);
   const [showVente, setShowVente] = useState(false);
   const [showStock, setShowStock] = useState(false);
@@ -855,6 +773,7 @@ function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeC
   if (!PERMS[userInfo?.role]?.finances) return <AccessDenied />;
   const canWrite = WRITE_PERMS[userInfo?.role]?.finances;
   const bandeCloturee = bandeCfg?.statut === "archivee";
+  const bande1Cloturee = bandes.find(b => b.id === "bande1")?.statut === "archivee";
 
   // Charger données bande 1 et crédits
   useEffect(() => {
@@ -1068,7 +987,8 @@ function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeC
         )}
       </div>
 
-      {/* Bande 1 solde */}
+      {/* Bande 1 solde — cachée si clôturée */}
+      {!bande1Cloturee && (
       <div style={{ ...S.card, border: "1.5px solid #C9A84C", background: "#FFFBEB" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <p style={{ ...S.cardTitle, marginBottom: 0, color: "#92400E" }}>🐣 Bande 1 — Solde & Ventes</p>
@@ -1107,6 +1027,7 @@ function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeC
         )}
         {!bande1Data && canWrite && <p style={{ fontSize: 12, color: "#E67E22", margin: "8px 0 0" }}>👆 Cliquez ✏️ pour renseigner le solde bande 1</p>}
       </div>
+      )}
 
       {/* Stock Aliments */}
       <div style={S.card}>
@@ -1128,14 +1049,57 @@ function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeC
         </div>
       </div>
 
-      {/* Onglets */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto" }}>
-        {[["depenses", "💸 Dépenses"], ["ventes", "🛒 Ventes"], ["credits", `💳 Crédits${totalCreditDu > 0 ? ` (${credits.filter(c => c.statut !== "payé").length})` : ""}`], ["sorties", `📤 Sorties${sorties.length > 0 ? ` (${sorties.length})` : ""}`], ["dividendes", "🤝 Dividendes"]].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flexShrink: 0, padding: "8px 12px", borderRadius: 10, border: "none", fontWeight: 700, fontSize: 11, cursor: "pointer", background: tab === id ? "#0F2940" : "#E8ECF0", color: tab === id ? "#fff" : "#666" }}>{label}</button>
+      {/* Onglets — 3 sections simples */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {[["entrees", `💵 Entrées${totalCreditDu > 0 ? ` (${credits.filter(c => c.statut !== "payé").length} crédits)` : ""}`], ["argent", "💸 Dépenses"], ["autres", "📤 Autres"]].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "none", fontWeight: 700, fontSize: 12, cursor: "pointer", background: tab === id ? "#0F2940" : "#E8ECF0", color: tab === id ? "#fff" : "#666" }}>{label}</button>
         ))}
       </div>
 
-      {tab === "depenses" && <>
+      {/* ═══ ENTRÉES : ventes + crédits ensemble ═══ */}
+      {tab === "entrees" && <>
+        {canWrite && !bandeCloturee && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+            <button onClick={() => { setEditVenteId(null); setVente({ date: "", client: "", canal: "", nbPoulets: "", prixUnit: "", typeVente: "comptant", acompte: "", dateEcheance: "" }); setShowVente(true); }} style={{ ...S.btn("#1E8449"), flex: 1, marginBottom: 8 }}>+ Vente payée</button>
+            <button onClick={() => { setEditVenteId(null); setVente({ date: "", client: "", canal: "", nbPoulets: "", prixUnit: "", typeVente: "credit", acompte: "", dateEcheance: "" }); setShowVente(true); }} style={{ ...S.btn("#E67E22"), flex: 1, marginBottom: 8 }}>+ Vente à crédit</button>
+          </div>
+        )}
+        {!canWrite && <div style={S.alert("#AAB7B8")}><span style={{ color: "#888" }}>👁️ Lecture seule</span></div>}
+
+        {/* Résumé crédits en attente */}
+        {credits.filter(c => c.statut !== "payé").length > 0 && (
+          <div style={S.kpiRow}>
+            <div style={S.kpi("#C0392B")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(totalCreditDu)}</div><div style={S.kpiLbl}>💳 Argent à récupérer</div></div>
+            <div style={S.kpi("#1E8449")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(totalV + totalCreditRecu)}</div><div style={S.kpiLbl}>💵 Déjà encaissé</div></div>
+          </div>
+        )}
+
+        {/* Liste unifiée : crédits en attente d'abord, puis ventes payées */}
+        {credits.length === 0 && ventes.length === 0 && (
+          <div style={{ ...S.card, textAlign: "center", padding: 24, color: "#AAB7B8" }}><div style={{ fontSize: 36 }}>💵</div><p>Aucune vente enregistrée</p></div>
+        )}
+        {credits.length > 0 && (
+          <>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#E67E22", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 0.5 }}>💳 Crédits en attente de paiement</p>
+            {credits.map(c => (
+              <CreditCard key={c.id} c={c} canWrite={canWrite && !bandeCloturee} marquerPayé={marquerPayé} delCredit={delCredit}
+                creditStatutColor={creditStatutColor} creditStatutLabel={creditStatutLabel} />
+            ))}
+          </>
+        )}
+        {ventes.length > 0 && (
+          <>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#1E8449", margin: "12px 0 6px", textTransform: "uppercase", letterSpacing: 0.5 }}>✅ Ventes payées</p>
+            {ventes.map(v => (
+              <VenteCard key={v.id} v={v} canWrite={canWrite} delVente={delVente} bandeCloturee={bandeCloturee}
+                onEdit={() => { setVente({ date: v.date, client: v.client, canal: v.canal, nbPoulets: v.nbPoulets, prixUnit: v.prixUnit, typeVente: "comptant", acompte: "", dateEcheance: "" }); setEditVenteId(v.id); setShowVente(true); }} />
+            ))}
+          </>
+        )}
+      </>}
+
+      {/* ═══ DÉPENSES ═══ */}
+      {tab === "argent" && <>
         {canWrite && !bandeCloturee && <button onClick={() => { setEditDepId(null); setDep({ date: "", categorie: "", description: "", montant: "" }); setShowDep(true); }} style={S.btn("#C0392B")}>+ Ajouter une dépense</button>}
         {!canWrite && <div style={S.alert("#AAB7B8")}><span style={{ color: "#888" }}>👁️ Lecture seule</span></div>}
         {depenses.length === 0
@@ -1148,82 +1112,29 @@ function Finances({ depenses, ventes, userInfo, bandeActive, bandeCfg, setBandeC
         }
       </>}
 
-      {tab === "ventes" && <>
-        {canWrite && !bandeCloturee && <button onClick={() => { setEditVenteId(null); setVente({ date: "", client: "", canal: "", nbPoulets: "", prixUnit: "", typeVente: "comptant", acompte: "", dateEcheance: "" }); setShowVente(true); }} style={S.btn("#1E8449")}>+ Enregistrer une vente</button>}
-        {!canWrite && <div style={S.alert("#AAB7B8")}><span style={{ color: "#888" }}>👁️ Lecture seule</span></div>}
-
-        {/* Bouton vider toutes les ventes — admin seulement */}
-        {userInfo?.role === "admin" && ventes.length > 0 && (
-          <button onClick={async () => {
-            for (const v of ventes) {
-              await deleteDoc(doc(db, "samapoulet", bandeActive, "ventes", v.id));
-            }
-          }} style={{ ...S.btn("#C0392B"), marginBottom: 8, background: "#FFF0F0", color: "#C0392B", border: "1.5px solid #C0392B" }}>
-            🗑️ Supprimer toutes les ventes ({ventes.length})
-          </button>
-        )}
-        {ventes.length === 0
-          ? <div style={{ ...S.card, textAlign: "center", padding: 24, color: "#AAB7B8" }}><div style={{ fontSize: 36 }}>🛒</div><p>Aucune vente</p></div>
-          : ventes.map(v => (
-            <VenteCard key={v.id} v={v} canWrite={canWrite} delVente={delVente} bandeCloturee={bandeCloturee}
-              onEdit={() => { setVente({ date: v.date, client: v.client, canal: v.canal, nbPoulets: v.nbPoulets, prixUnit: v.prixUnit, typeVente: "comptant", acompte: "", dateEcheance: "" }); setEditVenteId(v.id); setShowVente(true); }} />
-          ))
-        }
-      </>}
-
-      {tab === "credits" && <>
-        {canWrite && !bandeCloturee && <button onClick={() => { setEditVenteId(null); setVente({ date: "", client: "", canal: "", nbPoulets: "", prixUnit: "", typeVente: "credit", acompte: "", dateEcheance: "" }); setShowVente(true); }} style={S.btn("#E67E22")}>+ Vente à crédit</button>}
-
-        {/* Bouton vider tous les crédits — admin seulement */}
-        {userInfo?.role === "admin" && credits.length > 0 && (
-          <button onClick={async () => {
-            for (const c of credits) {
-              await deleteDoc(doc(db, "samapoulet", bandeActive, "credits", c.id));
-            }
-          }} style={{ ...S.btn("#C0392B"), marginBottom: 8, background: "#FFF0F0", color: "#C0392B", border: "1.5px solid #C0392B" }}>
-            🗑️ Supprimer tous les crédits ({credits.length})
-          </button>
-        )}
-
-        {/* Résumé crédits */}
-        {credits.length > 0 && (
-          <div style={S.kpiRow}>
-            <div style={S.kpi("#C0392B")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(totalCreditDu)}</div><div style={S.kpiLbl}>Total dû</div></div>
-            <div style={S.kpi("#1E8449")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(totalCreditRecu)}</div><div style={S.kpiLbl}>Total reçu</div></div>
-          </div>
-        )}
-
-        {credits.length === 0
-          ? <div style={{ ...S.card, textAlign: "center", padding: 24, color: "#AAB7B8" }}><div style={{ fontSize: 36 }}>💳</div><p>Aucune vente à crédit</p></div>
-          : credits.map(c => (
-            <CreditCard key={c.id} c={c} canWrite={canWrite} marquerPayé={marquerPayé} delCredit={delCredit}
-              creditStatutColor={creditStatutColor} creditStatutLabel={creditStatutLabel} />
-          ))
-        }
-      </>}
-
-      {tab === "sorties" && <>
+      {/* ═══ AUTRES : sorties poulets + dividendes ═══ */}
+      {tab === "autres" && <>
+        {/* Sorties de poulets sans paiement */}
+        <p style={{ fontSize: 12, fontWeight: 700, color: "#6C3483", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>📤 Poulets donnés / prélevés (sans paiement)</p>
         <div style={S.alert("#6C3483")}>
-          <span style={{ fontSize: 12, color: "#6C3483" }}>📤 Poulets qui sortent sans paiement : prélèvements des associés, dons, collaborations... Ils sont déduits de l'effectif mais n'apportent aucune recette.</span>
+          <span style={{ fontSize: 12, color: "#6C3483" }}>Poulets pris par les associés, donnés ou offerts en collaboration. Déduits du nombre restant, mais sans argent reçu.</span>
         </div>
-        {canWrite && <button onClick={() => { setEditSortieId(null); setSortieForm({ date: "", nbPoulets: "", categorie: "Prélèvement associé", beneficiaire: "", notes: "" }); setShowSortie(true); }} style={S.btn("#6C3483")}>+ Enregistrer une sortie</button>}
-        {!canWrite && <div style={S.alert("#AAB7B8")}><span style={{ color: "#888" }}>👁️ Lecture seule</span></div>}
+        {canWrite && !bandeCloturee && <button onClick={() => { setEditSortieId(null); setSortieForm({ date: "", nbPoulets: "", categorie: "Prélèvement associé", beneficiaire: "", notes: "" }); setShowSortie(true); }} style={S.btn("#6C3483")}>+ Enregistrer une sortie de poulets</button>}
 
         {sorties.length > 0 && (
           <div style={S.kpi("#6C3483")}><div style={S.kpiVal}>{fmtN(sorties.reduce((s, x) => s + Number(x.nbPoulets || 0), 0))}</div><div style={S.kpiLbl}>Total poulets sortis sans paiement</div></div>
         )}
         <div style={{ height: 10 }} />
-
         {sorties.length === 0
-          ? <div style={{ ...S.card, textAlign: "center", padding: 24, color: "#AAB7B8" }}><div style={{ fontSize: 36 }}>📤</div><p>Aucune sortie enregistrée</p></div>
+          ? <div style={{ ...S.card, textAlign: "center", padding: 16, color: "#AAB7B8" }}><p style={{ margin: 0 }}>Aucune sortie enregistrée</p></div>
           : sorties.map(x => (
-            <SortieCard key={x.id} x={x} canWrite={canWrite} delSortie={delSortie}
+            <SortieCard key={x.id} x={x} canWrite={canWrite && !bandeCloturee} delSortie={delSortie}
               onEdit={() => { setSortieForm({ date: x.date, nbPoulets: x.nbPoulets, categorie: x.categorie, beneficiaire: x.beneficiaire || "", notes: x.notes || "" }); setEditSortieId(x.id); setShowSortie(true); }} />
           ))
         }
-      </>}
 
-      {tab === "dividendes" && <>
+        {/* Dividendes */}
+        <p style={{ fontSize: 12, fontWeight: 700, color: "#1E8449", margin: "20px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>🤝 Dividendes des associés</p>
         <div style={{ ...S.card, background: benefice > 0 ? "#F0FFF4" : "#FFF5F5", border: `1.5px solid ${benefice > 0 ? "#1E8449" : "#C0392B"}` }}>
           <p style={{ fontWeight: 700, color: "#0F2940", marginBottom: 6 }}>Résultat net distribuable</p>
           <p style={{ fontSize: 24, fontWeight: 800, color: benefice > 0 ? "#1E8449" : "#C0392B", margin: 0 }}>{fmt(benefice)}</p>
@@ -1680,9 +1591,83 @@ function Associes({ depenses, ventes, userInfo, onLogout, presences = {} }) {
   );
 }
 
+// ── OUTILS ADMIN ──────────────────────────────────────────────────
+function OutilsAdmin({ userInfo, bandeActive }) {
+  const [confirm1, setConfirm1] = useState(false);
+  const [confirm2, setConfirm2] = useState(false);
+  if (userInfo?.role !== "admin") return <AccessDenied />;
+
+  const viderVentes = async () => {
+    try {
+      const { getDocs, collection: col, deleteDoc: del, doc: d } = await import("firebase/firestore");
+      const snap = await getDocs(col(db, "samapoulet", bandeActive, "ventes"));
+      for (const dc of snap.docs) await del(d(db, "samapoulet", bandeActive, "ventes", dc.id));
+      alert(`✅ ${snap.docs.length} vente(s) supprimée(s) !`);
+      setConfirm1(false);
+    } catch(e) { alert("Erreur : " + e.message); }
+  };
+
+  const migrerCredits = async () => {
+    try {
+      const { getDocs, collection: col, deleteDoc: del, doc: d, addDoc: add } = await import("firebase/firestore");
+      const snap = await getDocs(col(db, "samapoulet", bandeActive, "credits"));
+      let migres = [];
+      for (const dc of snap.docs) {
+        const data = dc.data();
+        if (data.statut === "payé") {
+          const { montantRecu, resteDu, statut, createdAt, ...rest } = data;
+          await add(col(db, "samapoulet", bandeActive, "ventes"), {
+            ...rest, total: data.total, notes: "Crédit soldé (migré)",
+            createdAt: createdAt || new Date().toISOString()
+          });
+          await del(d(db, "samapoulet", bandeActive, "credits", dc.id));
+          migres.push(data.client);
+        }
+      }
+      alert(migres.length > 0 ? `✅ ${migres.length} crédit(s) migré(s) vers Ventes :\n${migres.join(", ")}` : "Aucun crédit payé trouvé à migrer.");
+      setConfirm2(false);
+    } catch(e) { alert("Erreur : " + e.message); }
+  };
+
+  return (
+    <div style={S.section}>
+      <p style={S.sectionTitle}>🛠️ Outils admin</p>
+      <div style={S.alert("#E67E22")}>
+        <span style={{ fontSize: 12, color: "#92400E" }}>⚠️ Ces outils modifient directement les données. À utiliser avec prudence. Ils agissent sur la bande active : <strong>{bandeActive}</strong></span>
+      </div>
+
+      <div style={{ ...S.card, border: "1.5px solid #C0392B" }}>
+        <p style={{ fontWeight: 700, color: "#C0392B", fontSize: 13, marginBottom: 8 }}>🗑️ Vider toutes les ventes de la bande active</p>
+        <p style={{ fontSize: 11, color: "#888", marginBottom: 10 }}>Supprime définitivement toutes les ventes de {bandeActive}. Irréversible.</p>
+        {!confirm1
+          ? <button onClick={() => setConfirm1(true)} style={S.btn("#C0392B")}>🗑️ Supprimer toutes les ventes</button>
+          : <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={viderVentes} style={{ ...S.btnSm("#C0392B"), flex: 1 }}>✅ Oui, tout supprimer</button>
+              <button onClick={() => setConfirm1(false)} style={{ ...S.btnSm("#888"), flex: 1 }}>✕ Annuler</button>
+            </div>
+        }
+      </div>
+
+      <div style={{ ...S.card, border: "1.5px solid #6C3483" }}>
+        <p style={{ fontWeight: 700, color: "#6C3483", fontSize: 13, marginBottom: 8 }}>🔄 Migrer les crédits payés vers Ventes</p>
+        <p style={{ fontSize: 11, color: "#888", marginBottom: 10 }}>Déplace les crédits avec statut "payé" restés bloqués dans Crédits vers la liste des Ventes.</p>
+        {!confirm2
+          ? <button onClick={() => setConfirm2(true)} style={S.btn("#6C3483")}>🔄 Migrer les crédits payés</button>
+          : <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={migrerCredits} style={{ ...S.btnSm("#6C3483"), flex: 1 }}>✅ Oui, migrer</button>
+              <button onClick={() => setConfirm2(false)} style={{ ...S.btnSm("#888"), flex: 1 }}>✕ Annuler</button>
+            </div>
+        }
+      </div>
+    </div>
+  );
+}
+
 // ── GESTION BANDES ────────────────────────────────────────────────
 function GestionBandes({ bandes, bandeActive, setBandeActive, userInfo }) {
   const [show, setShow] = useState(false);
+  const [showArchivees, setShowArchivees] = useState(false);
+  const [confirmClotureId, setConfirmClotureId] = useState(null);
   const [form, setForm] = useState({ numero: "", dateDebut: "", poussinsDepart: "", objectif: "", fournisseur: "" });
 
   if (!PERMS[userInfo?.role]?.bandes) return <AccessDenied />;
@@ -1697,13 +1682,48 @@ function GestionBandes({ bandes, bandeActive, setBandeActive, userInfo }) {
   };
 
   const cloturer = async (id) => {
-    if (!window.confirm("Clôturer cette bande ?")) return;
     await updateDoc(doc(db, "samapoulet", id), { statut: "archivee" });
+    setConfirmClotureId(null);
     if (bandeActive === id) {
       const autre = bandes.find(b => b.id !== id && b.statut === "active");
       if (autre) setBandeActive(autre.id);
     }
   };
+
+  const bandesActives = bandes.filter(b => b.statut === "active");
+  const bandesArchivees = bandes.filter(b => b.statut !== "active");
+
+  const BandeCard = ({ b, archivee }) => (
+    <div key={b.id} style={{ ...S.card, border: `2px solid ${b.id === bandeActive ? "#1A5276" : "#eee"}`, opacity: archivee ? 0.8 : 1 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontWeight: 800, fontSize: 15 }}>Bande {b.numero}</span>
+            {b.id === bandeActive && <span style={S.tag("#1A5276")}>Active</span>}
+            <span style={S.tag(b.statut === "active" ? "#1E8449" : "#AAB7B8")}>{b.statut === "active" ? "En cours" : "🔒 Clôturée"}</span>
+          </div>
+          <div style={{ fontSize: 12, color: "#888" }}>📅 Démarrage : {b.dateDebut}</div>
+          <div style={{ fontSize: 12, color: "#888" }}>🐔 {fmtN(b.poussinsDepart)} poussins • {b.fournisseur}</div>
+          {b.objectif && <div style={{ fontSize: 12, color: "#1A5276", marginTop: 2 }}>🎯 {b.objectif}</div>}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {b.id !== bandeActive && <button onClick={() => setBandeActive(b.id)} style={S.btnSm(archivee ? "#888" : "#1E8449")}>{archivee ? "👁️ Consulter" : "Activer"}</button>}
+          {b.statut === "active" && confirmClotureId !== b.id && <button onClick={() => setConfirmClotureId(b.id)} style={S.btnSm("#E67E22")}>Clôturer</button>}
+        </div>
+      </div>
+      {confirmClotureId === b.id && (
+        <div style={{ marginTop: 10 }}>
+          <div style={S.alert("#E67E22")}>
+            <span style={{ fontSize: 12, color: "#92400E" }}>⚠️ Une bande clôturée passe en lecture seule : plus aucune vente, dépense ou saisie possible. Elle sera rangée dans "Bandes clôturées".</span>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => cloturer(b.id)} style={{ ...S.btnSm("#E67E22"), flex: 1 }}>✅ Confirmer la clôture</button>
+            <button onClick={() => setConfirmClotureId(null)} style={{ ...S.btnSm("#888"), flex: 1 }}>✕ Annuler</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div style={S.section}>
@@ -1712,26 +1732,21 @@ function GestionBandes({ bandes, bandeActive, setBandeActive, userInfo }) {
         <button onClick={() => setShow(true)} style={S.btnSm("#1A5276")}>+ Nouvelle bande</button>
       </div>
 
-      {bandes.map(b => (
-        <div key={b.id} style={{ ...S.card, border: `2px solid ${b.id === bandeActive ? "#1A5276" : "#eee"}` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <span style={{ fontWeight: 800, fontSize: 15 }}>Bande {b.numero}</span>
-                {b.id === bandeActive && <span style={S.tag("#1A5276")}>Active</span>}
-                <span style={S.tag(b.statut === "active" ? "#1E8449" : "#AAB7B8")}>{b.statut === "active" ? "En cours" : "Archivée"}</span>
-              </div>
-              <div style={{ fontSize: 12, color: "#888" }}>📅 Démarrage : {b.dateDebut}</div>
-              <div style={{ fontSize: 12, color: "#888" }}>🐔 {fmtN(b.poussinsDepart)} poussins • {b.fournisseur}</div>
-              {b.objectif && <div style={{ fontSize: 12, color: "#1A5276", marginTop: 2 }}>🎯 {b.objectif}</div>}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {b.id !== bandeActive && b.statut === "active" && <button onClick={() => setBandeActive(b.id)} style={S.btnSm("#1E8449")}>Activer</button>}
-              {b.statut === "active" && <button onClick={() => cloturer(b.id)} style={S.btnSm("#E67E22")}>Clôturer</button>}
-            </div>
+      {/* Bandes en cours */}
+      <p style={{ fontSize: 12, fontWeight: 700, color: "#1E8449", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>✅ En cours ({bandesActives.length})</p>
+      {bandesActives.map(b => <BandeCard key={b.id} b={b} archivee={false} />)}
+      {bandesActives.length === 0 && <div style={{ ...S.card, textAlign: "center", padding: 20, color: "#AAB7B8" }}><p style={{ margin: 0 }}>Aucune bande en cours</p></div>}
+
+      {/* Bandes clôturées — repliées */}
+      {bandesArchivees.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div onClick={() => setShowArchivees(!showArchivees)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", padding: "10px 14px", background: "#F0F4F8", borderRadius: 12, marginBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 }}>🔒 Bandes clôturées ({bandesArchivees.length})</span>
+            <span style={{ fontSize: 14, color: "#888" }}>{showArchivees ? "▲" : "▼"}</span>
           </div>
+          {showArchivees && bandesArchivees.map(b => <BandeCard key={b.id} b={b} archivee={true} />)}
         </div>
-      ))}
+      )}
 
       {bandes.length === 0 && <div style={{ ...S.card, textAlign: "center", padding: 24, color: "#AAB7B8" }}><p>Aucune bande créée</p></div>}
 
@@ -2748,6 +2763,7 @@ export default function App() {
     { id: "strategie", icon: "🚀", label: "Stratégie" },
     { id: "associes", icon: "🤝", label: "Associés" },
     { id: "bandes", icon: "🐣", label: "Bandes" },
+    ...(userInfo?.role === "admin" ? [{ id: "outils", icon: "🛠️", label: "Outils admin" }] : []),
   ];
 
   const isMainTab = mainTabs.some(t => t.id === tab);
@@ -2765,7 +2781,7 @@ export default function App() {
 
       {tab === "dashboard" && <Dashboard suivi={suivi} depenses={depenses} ventes={ventes} credits={credits} sorties={sorties} vaccins={vaccins} userInfo={userInfo} bandeCfg={bandeCfg} bandeActive={bandeActive} bandes={bandes} donneesGlobales={donneesGlobales} setTab={setTab} setShowVenteRapide={setShowVenteRapide} />}
       {tab === "suivi" && <SuiviQuotidien suivi={suivi} userInfo={userInfo} bandeCfg={bandeCfg} bandeActive={bandeActive} />}
-      {tab === "finances" && <Finances depenses={depenses} ventes={ventes} userInfo={userInfo} bandeActive={bandeActive} bandeCfg={bandeCfg} setBandeCfg={setBandeCfg} />}
+      {tab === "finances" && <Finances depenses={depenses} ventes={ventes} userInfo={userInfo} bandeActive={bandeActive} bandeCfg={bandeCfg} setBandeCfg={setBandeCfg} bandes={bandes} />}
       {tab === "analytics" && <Analytics suivi={suivi} depenses={depenses} ventes={ventes} credits={credits} sorties={sorties} bandeCfg={bandeCfg} />}
       {tab === "calcul" && <Calculateur depenses={depenses} suivi={suivi} bandeCfg={bandeCfg} />}
       {tab === "rapport" && <Rapport suivi={suivi} depenses={depenses} ventes={ventes} credits={credits} sorties={sorties} vaccins={vaccins} bandeCfg={bandeCfg} incidents={incidents} />}
@@ -2778,6 +2794,7 @@ export default function App() {
       {tab === "strategie" && <Strategie phases={phases} setPhases={setPhases} userInfo={userInfo} />}
       {tab === "associes" && <Associes depenses={depenses} ventes={ventes} userInfo={userInfo} onLogout={() => signOut(auth)} presences={presences} />}
       {tab === "bandes" && <GestionBandes bandes={bandes} bandeActive={bandeActive} setBandeActive={setBandeActive} userInfo={userInfo} />}
+      {tab === "outils" && <OutilsAdmin userInfo={userInfo} bandeActive={bandeActive} />}
 
       {/* Menu "Plus" */}
       {tab === "more" && (
