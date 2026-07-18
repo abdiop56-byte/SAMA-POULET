@@ -236,7 +236,8 @@ function Login() {
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────
-function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInfo, bandeCfg, bandeActive, bandes, donneesGlobales, setTab, setShowVenteRapide }) {
+function Dashboard({ suivi, depenses, ventes, credits, sorties, abattages, vaccins, userInfo, bandeCfg, bandeActive, bandes, donneesGlobales, setTab, setShowVenteRapide }) {
+  const [montrerMontants, setMontrerMontants] = useState(false);
   const poussins = bandeCfg?.poussinsDepart || 450;
   const totalMorts = suivi.reduce((s, j) => s + Number(j.morts || 0), 0);
   const effectif = poussins - totalMorts;
@@ -245,77 +246,156 @@ function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInf
   const totalCreditRecu = (credits || []).reduce((s, c) => s + Number(c.montantRecu || 0), 0);
   const resultat = (totalV + totalCreditRecu) - totalDep;
   const nbVendus = calcNbSortis(ventes, credits, sorties);
+  const totalAbattus = (abattages || []).reduce((s, a) => s + Number(a.nbPoulets || 0), 0);
+  const nbVentesPayantes = ventes.reduce((s, v) => s + Number(v.nbPoulets || 0), 0) + (credits || []).reduce((s, c) => s + Number(c.nbPoulets || 0), 0);
+  const nbSortiesTotal = (sorties || []).reduce((s, x) => s + Number(x.nbPoulets || 0), 0);
+  const vivants = Math.max(poussins - totalMorts - totalAbattus - nbSortiesTotal, 0);
+  const stockFrigo = Math.max(totalAbattus - nbVentesPayantes, 0);
   const dateDebut = bandeCfg?.dateDebut || "2026-05-15";
   const joursEcoules = Math.max(Math.floor((new Date() - new Date(dateDebut)) / 86400000) + 1, 1);
   const semaine = Math.min(Math.ceil(joursEcoules / 7), 8);
   const tauxMort = ((totalMorts / poussins) * 100).toFixed(1);
   const vaccsRestants = vaccins.filter(v => !v.fait).length;
+  const vaccsFaits = vaccins.filter(v => v.fait).length;
   const stock = bandeCfg?.stockAliments || 0;
   const creditsEchus = (credits || []).filter(c => c.statut !== "payé" && c.dateEcheance && new Date(c.dateEcheance) < new Date()).length;
   const numeroB = bandeCfg?.numero || (bandeActive === "bande2" ? 2 : 1);
+  const masque = "✱✱✱✱";
+
+  // Style carte Yarko
+  const carte = { background: "#fff", borderRadius: 20, padding: "18px 16px", border: "1.5px solid #E8ECF0", minHeight: 120, display: "flex", flexDirection: "column", cursor: "pointer" };
+  const carteIcone = (bg) => ({ width: 42, height: 42, borderRadius: 21, background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, marginBottom: 10 });
+  const carteTitre = { fontSize: 14, fontWeight: 700, color: "#0F2940", marginBottom: 8 };
+  const carteValeur = { fontSize: 26, fontWeight: 800, color: "#0F2940", margin: "0 0 4px" };
+  const carteSousTitre = { fontSize: 11, color: "#8A97A5", margin: 0 };
 
   return (
     <div>
-      {/* ── En-tête simple ─────────────────────────────────────── */}
-      <div style={S.header}>
+      {/* ── En-tête ─────────────────────────────────────────────── */}
+      <div style={{ ...S.header, borderRadius: "0 0 28px 28px", paddingBottom: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <p style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>🐓 Sama Poulet</p>
             <p style={{ fontSize: 12, opacity: 0.7, margin: "4px 0 0" }}>Bonjour {userInfo?.nom}</p>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <span style={{ background: "#C9A84C", color: "#fff", borderRadius: 20, padding: "4px 14px", fontSize: 12, fontWeight: 700 }}>Bande {numeroB}</span>
-            <p style={{ fontSize: 11, opacity: 0.6, margin: "6px 0 0" }}>Semaine {semaine}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => setMontrerMontants(!montrerMontants)}
+              style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 20, width: 38, height: 38, fontSize: 17, cursor: "pointer" }}>
+              {montrerMontants ? "🙈" : "👁️"}
+            </button>
+            <div style={{ textAlign: "right" }}>
+              <span style={{ background: "#C9A84C", color: "#fff", borderRadius: 20, padding: "4px 14px", fontSize: 12, fontWeight: 700 }}>Bande {numeroB}</span>
+              <p style={{ fontSize: 11, opacity: 0.6, margin: "6px 0 0" }}>Semaine {semaine}</p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Grille d'actions rapides ────────────────────────────── */}
-      <div style={{ padding: "16px 16px 0" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
-          {[
-            { icon: "⚡", label: "Vente", action: () => setShowVenteRapide && setShowVenteRapide(true), color: "#1E8449", show: WRITE_PERMS[userInfo?.role]?.finances },
-            { icon: "🐔", label: "Suivi", action: () => setTab && setTab("suivi"), color: "#1A5276", show: PERMS[userInfo?.role]?.suivi },
-            { icon: "💸", label: "Dépense", action: () => setTab && setTab("finances"), color: "#C0392B", show: WRITE_PERMS[userInfo?.role]?.finances },
-            { icon: "📦", label: "Stock", action: () => setTab && setTab("finances"), color: "#E67E22", show: true },
-            { icon: "💉", label: "Santé", action: () => setTab && setTab("sante"), color: "#6C3483", show: PERMS[userInfo?.role]?.sante },
-            { icon: "💬", label: "Chat", action: () => setTab && setTab("chat"), color: "#1A5276", show: true },
-            { icon: "📈", label: "Stats", action: () => setTab && setTab("analytics"), color: "#784212", show: true },
-            { icon: "☰", label: "Plus", action: () => setTab && setTab("more"), color: "#888", show: true },
-          ].filter(a => a.show).map(a => (
-            <div key={a.label} onClick={a.action} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <div style={{ width: 54, height: 54, borderRadius: 27, background: a.color + "1A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>
-                {a.icon}
-              </div>
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#0F2940" }}>{a.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── 4 chiffres clés ─────────────────────────────────────── */}
-      <div style={{ padding: "18px 16px 0" }}>
-        <div style={S.kpiRow}>
-          <div style={S.kpi("#1A5276")}><div style={S.kpiVal}>{fmtN(Math.max(effectif - nbVendus, 0))}</div><div style={S.kpiLbl}>🐔 Poulets restants</div></div>
-          <div style={S.kpi("#784212")}><div style={S.kpiVal}>{fmtN(nbVendus)}</div><div style={S.kpiLbl}>Vendus / sortis</div></div>
-        </div>
-        <div style={S.kpiRow}>
-          <div style={S.kpi("#1E8449")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(totalV + totalCreditRecu)}</div><div style={S.kpiLbl}>💵 Argent encaissé</div></div>
-          <div style={S.kpi(resultat >= 0 ? "#0F2940" : "#8B1A1A")}><div style={{ fontSize: 15, fontWeight: 800 }}>{fmt(Math.abs(resultat))}</div><div style={S.kpiLbl}>{resultat >= 0 ? "✅ Bénéfice" : "❌ Perte"}</div></div>
-        </div>
+      {/* ── Pilules raccourcis ──────────────────────────────────── */}
+      <div style={{ display: "flex", gap: 8, padding: "16px 16px 0", overflowX: "auto" }}>
+        {[["📈 Rentabilité", "calcul"], ["📋 Rapport", "rapport"], ["📊 Stats", "analytics"], ["☰ Menu", "more"]].map(([label, dest]) => (
+          <button key={dest} onClick={() => setTab && setTab(dest)}
+            style={{ flexShrink: 0, padding: "9px 16px", borderRadius: 20, border: "1.5px solid #E0E6ED", background: "#fff", fontWeight: 700, fontSize: 12, color: "#0F2940", cursor: "pointer" }}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* ── Alertes (seulement si nécessaire) ───────────────────── */}
       {(Number(tauxMort) > 5 || (stock > 0 && stock < 50) || vaccsRestants > 0 || creditsEchus > 0) && (
         <div style={{ padding: "14px 16px 0" }}>
-          {Number(tauxMort) > 5 && <div style={S.alert("#C0392B")}><span style={{ fontWeight: 700, color: "#C0392B" }}>🚨 Mortalité {tauxMort}%</span> — seuil critique dépassé !</div>}
-          {stock > 0 && stock < 50 && <div style={S.alert("#C0392B")}><span style={{ fontWeight: 700, color: "#C0392B" }}>⚠️ Stock aliments bas :</span> {fmtN(stock)} kg — approvisionner</div>}
-          {vaccsRestants > 0 && <div style={S.alert("#E67E22")}><span style={{ fontWeight: 700, color: "#E67E22" }}>💉 {vaccsRestants} vaccination(s)</span> à faire — voir Santé</div>}
-          {creditsEchus > 0 && <div style={S.alert("#E67E22")}><span style={{ fontWeight: 700, color: "#E67E22" }}>💳 {creditsEchus} crédit(s) échu(s)</span> — relancer les clients</div>}
+          {Number(tauxMort) > 5 && <div style={S.alert("#C0392B")}><span style={{ fontWeight: 700, color: "#C0392B" }}>🚨 Mortalité {tauxMort}%</span> — seuil critique !</div>}
+          {stock > 0 && stock < 50 && <div style={S.alert("#C0392B")}><span style={{ fontWeight: 700, color: "#C0392B" }}>⚠️ Stock bas :</span> {fmtN(stock)} kg</div>}
+          {vaccsRestants > 0 && <div style={S.alert("#E67E22")}><span style={{ fontWeight: 700, color: "#E67E22" }}>💉 {vaccsRestants} vaccination(s)</span> à faire</div>}
+          {creditsEchus > 0 && <div style={S.alert("#E67E22")}><span style={{ fontWeight: 700, color: "#E67E22" }}>💳 {creditsEchus} crédit(s) échu(s)</span> — relancer</div>}
         </div>
       )}
 
-      {/* ── Dernières activités — bande active ──────────────────── */}
+      {/* ── Grille de cartes style Yarko ────────────────────────── */}
+      <div style={{ padding: "16px 16px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+        {/* Effectif vivant */}
+        <div style={carte} onClick={() => setTab && setTab("suivi")}>
+          <div style={carteIcone("#EBF2F8")}>🐔</div>
+          <p style={carteTitre}>Poulets vivants</p>
+          <p style={carteValeur}>{fmtN(vivants)}</p>
+          <p style={carteSousTitre}>au poulailler (sur {fmtN(poussins)})</p>
+        </div>
+
+        {/* Abattages */}
+        <div style={carte} onClick={() => setTab && setTab("suivi")}>
+          <div style={carteIcone("#FDF3E7")}>🔪</div>
+          <p style={carteTitre}>Mes abattages</p>
+          <p style={carteValeur}>{fmtN(totalAbattus)}</p>
+          <p style={{ ...carteSousTitre, color: stockFrigo > 0 ? "#E67E22" : "#8A97A5", fontWeight: stockFrigo > 0 ? 700 : 400 }}>
+            {stockFrigo > 0 ? `${fmtN(stockFrigo)} prêts à vendre 🧊` : "tout est vendu"}
+          </p>
+        </div>
+
+        {/* Mortalité */}
+        <div style={carte} onClick={() => setTab && setTab("suivi")}>
+          <div style={carteIcone("#FDEDEC")}>⚠️</div>
+          <p style={carteTitre}>Mortalité</p>
+          <p style={{ ...carteValeur, color: Number(tauxMort) > 5 ? "#C0392B" : "#0F2940" }}>{fmtN(totalMorts)}</p>
+          <p style={carteSousTitre}>{tauxMort}% du départ</p>
+        </div>
+
+        {/* Transactions — masquable */}
+        <div style={carte} onClick={() => setTab && setTab("finances")}>
+          <div style={carteIcone("#EAF7EF")}>💵</div>
+          <p style={carteTitre}>Transactions</p>
+          <p style={{ ...carteValeur, fontSize: montrerMontants ? 17 : 26 }}>{montrerMontants ? fmt(totalV + totalCreditRecu) : masque}</p>
+          <p style={carteSousTitre}>Ventes — Dépenses {montrerMontants ? fmt(totalDep) : masque}</p>
+        </div>
+
+        {/* Résultat — masquable */}
+        <div style={carte} onClick={() => setTab && setTab("finances")}>
+          <div style={carteIcone(resultat >= 0 ? "#EAF7EF" : "#FDEDEC")}>{resultat >= 0 ? "✅" : "❌"}</div>
+          <p style={carteTitre}>{resultat >= 0 ? "Bénéfice" : "Perte"}</p>
+          <p style={{ ...carteValeur, fontSize: montrerMontants ? 17 : 26, color: resultat >= 0 ? "#1E8449" : "#C0392B" }}>{montrerMontants ? fmt(Math.abs(resultat)) : masque}</p>
+          <p style={carteSousTitre}>bande {numeroB} en cours</p>
+        </div>
+
+        {/* Stock */}
+        <div style={carte} onClick={() => setTab && setTab("finances")}>
+          <div style={carteIcone("#FDF3E7")}>📦</div>
+          <p style={carteTitre}>Stock aliments</p>
+          <p style={{ ...carteValeur, color: stock < 50 ? "#C0392B" : "#0F2940" }}>{fmtN(stock)}</p>
+          <p style={carteSousTitre}>kg disponibles</p>
+        </div>
+
+        {/* Vaccinations */}
+        <div style={carte} onClick={() => setTab && setTab("sante")}>
+          <div style={carteIcone("#F3EAFB")}>💉</div>
+          <p style={carteTitre}>Vaccinations</p>
+          <p style={{ ...carteValeur, color: vaccsRestants > 0 ? "#E67E22" : "#1E8449" }}>{vaccsRestants > 0 ? vaccsRestants : "✓"}</p>
+          <p style={carteSousTitre}>{vaccsRestants > 0 ? "à faire" : `à jour (${vaccsFaits} faites)`}</p>
+        </div>
+
+        {/* Sorties sans paiement */}
+        <div style={carte} onClick={() => setTab && setTab("finances")}>
+          <div style={carteIcone("#F3EAFB")}>📤</div>
+          <p style={carteTitre}>Pertes & sorties</p>
+          <p style={carteValeur}>{fmtN(nbSortiesTotal)}</p>
+          <p style={carteSousTitre}>poulets sans paiement</p>
+        </div>
+
+        {/* Vendus — avec détail */}
+        <div style={carte} onClick={() => setTab && setTab("finances")}>
+          <div style={carteIcone("#EBF2F8")}>🛒</div>
+          <p style={carteTitre}>Vendus / sortis</p>
+          <p style={carteValeur}>{fmtN(nbVendus)}</p>
+          <p style={{ ...carteSousTitre, lineHeight: 1.5 }}>
+            <span style={{ color: "#1E8449", fontWeight: 700 }}>{fmtN(ventes.reduce((s, v) => s + Number(v.nbPoulets || 0), 0))} payés</span>
+            {" • "}
+            <span style={{ color: "#E67E22", fontWeight: 700 }}>{fmtN((credits || []).reduce((s, c) => s + Number(c.nbPoulets || 0), 0))} crédit</span>
+            {" • "}
+            <span style={{ color: "#6C3483", fontWeight: 700 }}>{fmtN(nbSortiesTotal)} offerts</span>
+          </p>
+        </div>
+      </div>
+
+      {/* ── Dernières activités ─────────────────────────────────── */}
       {(() => {
         const histo = [
           ...ventes.map(v => ({ ...v, _label: v.client, _montant: Number(v.total || 0), _sens: "+" })),
@@ -325,7 +405,7 @@ function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInf
         ].filter(h => h.createdAt).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 8);
 
         return (
-          <div style={{ padding: "20px 16px 0" }}>
+          <div style={{ padding: "22px 16px 0" }}>
             <p style={{ fontSize: 13, fontWeight: 800, color: "#0F2940", margin: "0 0 10px" }}>📋 Dernières activités — Bande {numeroB}</p>
             {histo.length === 0
               ? <p style={{ fontSize: 12, color: "#AAB7B8", textAlign: "center", padding: "20px 0" }}>Aucune activité encore</p>
@@ -336,7 +416,7 @@ function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInf
                     <div style={{ fontSize: 11, color: "#AAB7B8" }}>{h.date} {h.heureAction ? `à ${h.heureAction}` : ""}</div>
                   </div>
                   <span style={{ fontSize: 14, fontWeight: 800, color: h._sens === "+" ? "#1E8449" : h._sens === "-" ? "#C0392B" : "#AAB7B8" }}>
-                    {h._sens === "+" ? "+" : h._sens === "-" ? "-" : ""}{h._montant > 0 ? fmt(h._montant) : "—"}
+                    {h._montant > 0 ? (montrerMontants ? `${h._sens === "+" ? "+" : "-"}${fmt(h._montant)}` : masque) : "—"}
                   </span>
                 </div>
               ))
@@ -362,11 +442,11 @@ function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInf
             <p style={{ fontSize: 13, fontWeight: 800, color: "#0F2940", margin: "0 0 10px" }}>🌍 Vue générale — toutes les bandes ({bandes?.length || 0})</p>
             <div style={{ ...S.card, background: "linear-gradient(135deg, #2C3E50, #4A6378)", color: "#fff", marginBottom: 0 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", textAlign: "center", gap: 8 }}>
-                {[["Dépenses", fmt(gTotalDep), "#FF6B6B"], ["Recettes", fmt(gTotalV + gTotalCreditRecu), "#51CF66"], [gResultat >= 0 ? "Bénéfice" : "Perte", fmt(Math.abs(gResultat)), gResultat >= 0 ? "#51CF66" : "#FF6B6B"]].map(([l, v, c]) => (
-                  <div key={l}><div style={{ fontSize: 13, fontWeight: 800, color: c }}>{v}</div><div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>{l}</div></div>
+                {[["Dépenses", gTotalDep, "#FF6B6B"], ["Recettes", gTotalV + gTotalCreditRecu, "#51CF66"], [gResultat >= 0 ? "Bénéfice" : "Perte", Math.abs(gResultat), gResultat >= 0 ? "#51CF66" : "#FF6B6B"]].map(([l, v, c]) => (
+                  <div key={l}><div style={{ fontSize: 13, fontWeight: 800, color: c }}>{montrerMontants ? fmt(v) : masque}</div><div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>{l}</div></div>
                 ))}
               </div>
-              {gCreditDu > 0 && <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#FCC419" }}>💳 Argent à récupérer : {fmt(gCreditDu)}</div>}
+              {gCreditDu > 0 && <div style={{ textAlign: "center", marginTop: 8, fontSize: 11, color: "#FCC419" }}>💳 Argent à récupérer : {montrerMontants ? fmt(gCreditDu) : masque}</div>}
             </div>
           </div>
         );
@@ -376,12 +456,19 @@ function Dashboard({ suivi, depenses, ventes, credits, sorties, vaccins, userInf
 }
 
 // ── SUIVI QUOTIDIEN ───────────────────────────────────────────────
-function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
+function SuiviQuotidien({ suivi, abattages = [], ventes = [], credits = [], userInfo, bandeCfg, bandeActive }) {
   const [show, setShow] = useState(false);
   const [editId, setEditId] = useState(null);
   const [f, setF] = useState({ date: new Date().toISOString().split("T")[0], morts: "", alimentKg: "", poidsMoyen: "", temperature: "", observations: "" });
+  const [showAbattage, setShowAbattage] = useState(false);
+  const [abattageForm, setAbattageForm] = useState({ date: new Date().toISOString().split("T")[0], nbPoulets: "", notes: "" });
+  const [confirmDelAbattage, setConfirmDelAbattage] = useState(null);
   const totalMorts = suivi.reduce((s, j) => s + Number(j.morts || 0), 0);
   const effectif = (bandeCfg?.poussinsDepart || 450) - totalMorts;
+  const totalAbattus = abattages.reduce((s, a) => s + Number(a.nbPoulets || 0), 0);
+  const nbVentesPayantes = ventes.reduce((s, v) => s + Number(v.nbPoulets || 0), 0) + credits.reduce((s, c) => s + Number(c.nbPoulets || 0), 0);
+  const stockFrigo = Math.max(totalAbattus - nbVentesPayantes, 0);
+  const vivants = Math.max(effectif - totalAbattus, 0);
 
   if (!PERMS[userInfo?.role]?.suivi) return <AccessDenied />;
   const canWrite = WRITE_PERMS[userInfo?.role]?.suivi;
@@ -403,6 +490,20 @@ function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
 
   const del = async (id) => { if (window.confirm("Supprimer cette saisie ?")) await deleteDoc(doc(db, "samapoulet", bandeActive, "suiviQuotidien", id)); };
 
+  const saveAbattage = async () => {
+    if (!abattageForm.nbPoulets) return;
+    await addDoc(collection(db, "samapoulet", bandeActive, "abattages"), {
+      ...abattageForm, nbPoulets: Number(abattageForm.nbPoulets), ...makeSig(userInfo)
+    });
+    setAbattageForm({ date: new Date().toISOString().split("T")[0], nbPoulets: "", notes: "" });
+    setShowAbattage(false);
+  };
+
+  const delAbattage = async (id) => {
+    await deleteDoc(doc(db, "samapoulet", bandeActive, "abattages", id));
+    setConfirmDelAbattage(null);
+  };
+
   const dateDebut = bandeCfg?.dateDebut || "2026-05-15";
   const joursEcoules = Math.max(Math.floor((new Date() - new Date(dateDebut)) / 86400000) + 1, 1);
   const semaine = Math.min(Math.ceil(joursEcoules / 7), 8);
@@ -419,12 +520,46 @@ function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
         </div>
       )}
       {canWrite && !bandeCloturee && (
-        <button onClick={openNew} style={{ ...S.btn("#1E8449"), fontSize: 16, padding: "16px" }}>➕ Saisir aujourd'hui (morts, aliment...)</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={openNew} style={{ ...S.btn("#1E8449"), fontSize: 14, padding: "14px 8px", flex: 1 }}>➕ Saisir aujourd'hui</button>
+          <button onClick={() => setShowAbattage(true)} style={{ ...S.btn("#784212"), fontSize: 14, padding: "14px 8px", flex: 1 }}>🔪 Abattage</button>
+        </div>
       )}
       <div style={S.kpiRow}>
-        <div style={S.kpi("#1A5276")}><div style={S.kpiVal}>{fmtN(effectif)}</div><div style={S.kpiLbl}>Effectif actuel</div></div>
+        <div style={S.kpi("#1A5276")}><div style={S.kpiVal}>{fmtN(vivants)}</div><div style={S.kpiLbl}>🐔 Vivants au poulailler</div></div>
         <div style={S.kpi("#C0392B")}><div style={S.kpiVal}>{fmtN(totalMorts)}</div><div style={S.kpiLbl}>Total morts</div></div>
       </div>
+      <div style={S.kpiRow}>
+        <div style={S.kpi("#784212")}><div style={S.kpiVal}>{fmtN(totalAbattus)}</div><div style={S.kpiLbl}>🔪 Abattus au total</div></div>
+        <div style={S.kpi(stockFrigo > 0 ? "#E67E22" : "#AAB7B8")}><div style={S.kpiVal}>{fmtN(stockFrigo)}</div><div style={S.kpiLbl}>🧊 Prêts à vendre</div></div>
+      </div>
+
+      {/* Historique abattages */}
+      {abattages.length > 0 && (
+        <>
+          <p style={{ fontSize: 12, fontWeight: 700, color: "#784212", margin: "16px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>🔪 Abattages récents</p>
+          {abattages.slice(0, 5).map(a => (
+            <div key={a.id} style={{ ...S.card, borderLeft: "4px solid #784212" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{a.nbPoulets} poulet(s) abattu(s)</span>
+                  <div style={{ fontSize: 11, color: "#888" }}>📅 {a.date}{a.notes ? ` • ${a.notes}` : ""}</div>
+                  <SigLine auteur={a.auteur} heureAction={a.heureAction} />
+                </div>
+                {canWrite && !bandeCloturee && confirmDelAbattage !== a.id && (
+                  <button onClick={() => setConfirmDelAbattage(a.id)} style={S.btnIcon("#FFF0F0")}>🗑️</button>
+                )}
+              </div>
+              {confirmDelAbattage === a.id && (
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <button onClick={() => delAbattage(a.id)} style={{ ...S.btnSm("#C0392B"), flex: 1 }}>✅ Confirmer suppression</button>
+                  <button onClick={() => setConfirmDelAbattage(null)} style={{ ...S.btnSm("#888"), flex: 1 }}>✕ Annuler</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </>
+      )}
 
       {/* Calendrier de la bande */}
       <div style={S.card}>
@@ -481,6 +616,24 @@ function SuiviQuotidien({ suivi, userInfo, bandeCfg, bandeActive }) {
           <label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 2 }}>Observations</label>
           <textarea value={f.observations} onChange={e => setF(p => ({ ...p, observations: e.target.value }))} style={{ ...S.input, height: 70, resize: "none" }} />
           <button onClick={save} style={S.btn("#1E8449")}>{editId ? "✅ Modifier" : "✅ Enregistrer"}</button>
+        </Modal>
+      )}
+
+      {showAbattage && (
+        <Modal title="🔪 Enregistrer un abattage" onClose={() => setShowAbattage(false)}>
+          <div style={S.alert("#784212")}>
+            <span style={{ fontSize: 12, color: "#784212" }}>Les poulets abattus sont retirés du poulailler et ajoutés au stock "prêts à vendre" 🧊 jusqu'à leur vente.</span>
+          </div>
+          <Field label="Date" type="date" val={abattageForm.date} set={v => setAbattageForm(p => ({ ...p, date: v }))} />
+          <Field label="Nombre de poulets abattus" type="number" val={abattageForm.nbPoulets} set={v => setAbattageForm(p => ({ ...p, nbPoulets: v }))} />
+          {abattageForm.nbPoulets && (
+            <div style={S.alert("#1A5276")}>
+              <span style={{ fontSize: 12, color: "#1A5276" }}>Vivants après : <strong>{fmtN(Math.max(vivants - Number(abattageForm.nbPoulets), 0))}</strong> • Prêts à vendre : <strong>{fmtN(stockFrigo + Number(abattageForm.nbPoulets))}</strong></span>
+            </div>
+          )}
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#666", display: "block", marginBottom: 2 }}>Notes (optionnel)</label>
+          <textarea value={abattageForm.notes} onChange={e => setAbattageForm(p => ({ ...p, notes: e.target.value }))} style={{ ...S.input, height: 50, resize: "none" }} placeholder="Ex: Lot Tamkharite..." />
+          <button onClick={saveAbattage} style={S.btn("#784212")}>✅ Enregistrer l'abattage</button>
         </Modal>
       )}
     </div>
@@ -2612,6 +2765,7 @@ export default function App() {
   const [incidents, setIncidents] = useState([]);
   const [credits, setCredits] = useState([]);
   const [sorties, setSorties] = useState([]);
+  const [abattages, setAbattages] = useState([]);
   const [phases, setPhases] = useState(PHASES_INIT);
   const [presences, setPresences] = useState({});
   const [donneesGlobales, setDonneesGlobales] = useState({ ventes: [], depenses: [], credits: [], sorties: [], loading: true });
@@ -2680,6 +2834,9 @@ export default function App() {
 
     const q3c = query(collection(db, "samapoulet", bandeActive, "sorties"), orderBy("createdAt", "desc"));
     unsubs.push(onSnapshot(q3c, s => setSorties(s.docs.map(d => ({ id: d.id, ...d.data() })))));
+
+    const q3d = query(collection(db, "samapoulet", bandeActive, "abattages"), orderBy("createdAt", "desc"));
+    unsubs.push(onSnapshot(q3d, s => setAbattages(s.docs.map(d => ({ id: d.id, ...d.data() })))));
 
     unsubs.push(onSnapshot(collection(db, "samapoulet", bandeActive, "vaccinations"), async snap => {
       if (snap.empty) {
@@ -2779,8 +2936,8 @@ export default function App() {
         </div>
       )}
 
-      {tab === "dashboard" && <Dashboard suivi={suivi} depenses={depenses} ventes={ventes} credits={credits} sorties={sorties} vaccins={vaccins} userInfo={userInfo} bandeCfg={bandeCfg} bandeActive={bandeActive} bandes={bandes} donneesGlobales={donneesGlobales} setTab={setTab} setShowVenteRapide={setShowVenteRapide} />}
-      {tab === "suivi" && <SuiviQuotidien suivi={suivi} userInfo={userInfo} bandeCfg={bandeCfg} bandeActive={bandeActive} />}
+      {tab === "dashboard" && <Dashboard suivi={suivi} depenses={depenses} ventes={ventes} credits={credits} sorties={sorties} abattages={abattages} vaccins={vaccins} userInfo={userInfo} bandeCfg={bandeCfg} bandeActive={bandeActive} bandes={bandes} donneesGlobales={donneesGlobales} setTab={setTab} setShowVenteRapide={setShowVenteRapide} />}
+      {tab === "suivi" && <SuiviQuotidien suivi={suivi} abattages={abattages} ventes={ventes} credits={credits} userInfo={userInfo} bandeCfg={bandeCfg} bandeActive={bandeActive} />}
       {tab === "finances" && <Finances depenses={depenses} ventes={ventes} userInfo={userInfo} bandeActive={bandeActive} bandeCfg={bandeCfg} setBandeCfg={setBandeCfg} bandes={bandes} />}
       {tab === "analytics" && <Analytics suivi={suivi} depenses={depenses} ventes={ventes} credits={credits} sorties={sorties} bandeCfg={bandeCfg} />}
       {tab === "calcul" && <Calculateur depenses={depenses} suivi={suivi} bandeCfg={bandeCfg} />}
